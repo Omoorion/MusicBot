@@ -4,3 +4,6 @@ A Discord Music Bot written in Python using Repl.it that can play music using yo
 - main.py
 - music.py
 - keep_alive.py
+## Dependencies
+- have ffmpeg installed on your computer/container
+- have each of the python imports in main.py and music.py installed via pip or pip3.
