@@ -127,10 +127,9 @@ class music(commands.Cog):
   async def skip(self, ctx):
     if ctx.voice_client.is_playing():
           ctx.voice_client.stop()
+          #will automatically play next song because the function is activated when no songs are playing.
           #if 'songs' in db.keys():
-            #songs = db['songs']
-          await play_song(ctx)
-            
+            #songs = db['songs']            
           ctx.send("Skipped song!");
     else:
       ctx.send("I am not playing anything!")
