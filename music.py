@@ -1,6 +1,7 @@
 import discord
 from discord.ext import commands
 from yt_dlp import YoutubeDL
+import asyncio
 import ffmpeg
 import ffprobe
 from replit import db
@@ -11,9 +12,9 @@ class music(commands.Cog):
   def __init__(self, client):
     self.client = client
 
-    if 'loop' not in db.keys():
-      db['loop'] = False
-
+  global songs
+  songs = []
+  
   @commands.command()
   async def j(self,ctx):
     if ctx.author.voice is None:
@@ -25,93 +26,118 @@ class music(commands.Cog):
       await ctx.voice_client.move_to(voice_channel)
 
   @commands.command()
-  async def dis(self,ctx):
+  async def disconnect(self,ctx):
     await ctx.voice_client.disconnect()
   
   @commands.command()
   async def p(self, ctx, *args):
     url = " ".join(args[:])
     
-    if "https://www.youtube.com/watch?v=" not in url:
-      url = re.sub("[$@&',]","",url)
-      url = url.replace(" ", "+")
-      if ctx.author.voice is None:
+
+    if ctx.author.voice is None:
         await ctx.send("You're not in a voice channel!")
-      else:
-        voice_channel = ctx.author.voice.channel
-
-      if ctx.voice_client is None:
-        await voice_channel.connect()
-
-      if ctx.voice_client.is_playing():
-        ctx.voice_client.stop()
-      # FFMPEG_OPTIONS={'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5', 'options': '-vn'} !Optional!
-      YDL_OPTIONS = {'format': "bestaudio"}
-      vc = ctx.voice_client
-      html = urllib.request.urlopen("https://www.youtube.com/results?search_query=" + url)
-      video_ids = re.findall(r"watch\?v=(\S{11})", html.read().decode())
-      if not video_ids:
-        ctx.send("No results were found!")
-        
-      videourl = "https://www.youtube.com/watch?v=" + video_ids[0]
-      with YoutubeDL(YDL_OPTIONS) as ydl:
-        print("Trying to show video by name")
-        info = ydl.extract_info(videourl, download = False)
-        url2=""
-        for i in range(len(info['formats'])):
-          url2 = info['formats'][i]['url']
-          if("videoplayback" in url2):
-            break;
-            
-        source = await discord.FFmpegOpusAudio.from_probe(url2, method='fallback')
-        vc.play(source)
-        
     else:
-      if ctx.author.voice is None:
-        await ctx.send("You're not in a voice channel!")
-      else:
-        voice_channel = ctx.author.voice.channel
-
+      voice_channel = ctx.author.voice.channel
+      
       if ctx.voice_client is None:
         await voice_channel.connect()
-
-      if ctx.voice_client.is_playing():
-        ctx.voice_client.stop()
-        
-      FFMPEG_OPTIONS={'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5', 'options': '-vn'}
-      YDL_OPTIONS = {'format': "bestaudio"}
+      
       vc = ctx.voice_client
-      with YoutubeDL(YDL_OPTIONS) as ydl:
-        print("Trying to show video by url")
-        info = ydl.extract_info(url, download = False)
+      
+      videourl = ""
+      
+      if "https://www.youtube.com/watch?v=" not in url:
+        print("Searching by name!")
+        url = re.sub("[$@&',]","",url)
+        url = url.replace(" ", "+")
         
-        url2=""
-        for i in range(len(info['formats'])):
-          url2 = info['formats'][i]['url']
-          if("videoplayback" in url2):
-            break;
-        source = await discord.FFmpegOpusAudio.from_probe(url2, method='fallback')
-        vc.play(source)
+        html = urllib.request.urlopen("https://www.youtube.com/results?search_query=" + url)
+        video_ids = re.findall(r"watch\?v=(\S{11})", html.read().decode())
+        if not video_ids:
+          await ctx.send("No results were found!")
+        else:  
+          videourl = "https://www.youtube.com/watch?v=" + video_ids[0]
+      else:
+        print("Searching by url!")
+        videourl = url  
 
-@commands.command()
-async def pause(self,ctx):
-  await ctx.voice_client.pause()
-  await ctx.send("paused")
+      songs.append(videourl)
 
-@commands.command()
-async def resume(self,ctx):
-  await ctx.voice_client.resume()
-  await ctx.send("resumed")
+      print("song added to songs list!")
+      try: #bugged with 429 for some reason
+        await ctx.send("Added song to queue!")
+      except:
+        print("couldn't send message due to 429 error")
+      #plays the song
+      if(not ctx.voice_client.is_playing()):
+        await self.play_song(ctx)
+    
+  async def play_song(self, ctx):
+    track = songs.pop(-1) #track = videourl
 
-@commands.command()
-async def loop(self,ctx, arg1):
-  db['loop'] = arg1
-  await ctx.send("Set to " + db['loop'])
-
-def songtoplay(self, ctx, msg):
-    num = int(msg)
-    return num
+    #FFMPEG_OPTIONS={'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5', 'options': '-vn'}
+    YDL_OPTIONS = {'format': "bestaudio"}
+    with YoutubeDL(YDL_OPTIONS) as ydl:
+      print("Trying to show video by url")
+      info = ydl.extract_info(track, download = False)
+      
+      url2=""
+      for i in range(len(info['formats'])):
+        url2 = info['formats'][i]['url']
+        if("videoplayback" in url2):
+          break;
+      
+      try:
+        await ctx.send(content="playing track {}".format(track))
+      except:
+        print("couldn't send message due to 429 error")
+      loop = asyncio.get_event_loop()
+      ctx.voice_client.play(
+          await discord.FFmpegOpusAudio.from_probe(source=url2, method='fallback'),
+          after=lambda ex: loop.create_task(self.after(ctx))
+      )
+    ctx.voice_client.is_playing()
   
+  async def after(self, ctx):
+
+    if len(songs) >= 1  and not ctx.voice_client.is_playing():
+      await self.play_song(ctx)
+    else:
+      print("Problem occured: songs length: " + str(len(songs)))
+
+  @commands.command()
+  async def pause(self,ctx):
+    await ctx.voice_client.pause()
+    await ctx.send("paused")
+  
+  @commands.command()
+  async def resume(self,ctx):
+    await ctx.voice_client.resume()
+    await ctx.send("resumed")
+  
+  @commands.command()
+  async def loop(self,ctx, arg1):
+    if(str(arg1).lower() == "true" or str(arg1).lower() == "false"):
+      db['loop'] = arg1
+      await ctx.send("Set to " + str(db['loop']))
+    else:
+      await ctx.send("enter a valid argument to the command!")
+
+  @commands.command()
+  async def skip(self, ctx):
+    if ctx.voice_client.is_playing():
+          ctx.voice_client.stop()
+          #if 'songs' in db.keys():
+            #songs = db['songs']
+          await play_song(ctx)
+            
+          ctx.send("Skipped song!");
+    else:
+      ctx.send("I am not playing anything!")
+
 async def setup(client):
   await client.add_cog(music(client))
   print("Added cog!");
+
+#add a fav song save feature which when called, adds a new song to the list
+#add a play fav songs feauture which when called, plays all of your favourite songs!
