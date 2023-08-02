@@ -130,7 +130,7 @@ class music(commands.Cog):
           #will automatically play next song because the function is activated when no songs are playing.
           #if 'songs' in db.keys():
             #songs = db['songs']            
-          ctx.send("Skipped song!");
+          await ctx.send("Skipped song!");
     else:
       ctx.send("I am not playing anything!")
 
